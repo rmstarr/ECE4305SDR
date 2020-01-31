@@ -5,7 +5,7 @@ frameSize = 2^10;
 numFrames = 100;
 numSamples = numFrames*frameSize; % Samples to simulate
 modulationOrder = 2;
-filterUpsample = 4;
+filterUpsample = 8;
 filterSymbolSpan = 8;
 
 %% Impairments
@@ -25,30 +25,19 @@ filteredData = step(TxFlt, modulatedData);
 %% Add noise
 noisyData = awgn(filteredData,snr);%,'measured');
 
-%% Coarse Frequency (This works, but we need this in the larger for loop)
-noisyDataSq = noisyData.*noisyData;
-noisyDataSqXfm = zeros(length(noisyDataSq), 1);
-T = 1/sampleRateHz;
-K = length(noisyDataSq);
-
-for k = 1:1:length(noisyDataSq)
-    thisDataPoint = noisyDataSq(k)*(exp(((-1i*2*pi*k*T)/K)));
-    noisyDataSqXfm(k) = abs(thisDataPoint);
-end
-maxArg = max(noisyDataSqXfm) / (2*T*K);
-
-
 
 %% Setup visualization object(s)
-sa = dsp.SpectrumAnalyzer('SampleRate',sampleRateHz,'ShowLegend',true);
+% sa = dsp.SpectrumAnalyzer('SampleRate',sampleRateHz,'ShowLegend',true);
 
 %% Model of error
 % Add frequency offset to baseband signal
 
 % Precalculate constant(s)
 normalizedOffset = 1i.*2*pi*frequencyOffsetHz./sampleRateHz;
-
+T = 1/sampleRateHz;
+K = 1024;
 offsetData = zeros(size(noisyData));
+newBoi = zeros(size(noisyData));
 for k=1:frameSize:numSamples*filterUpsample
 
     % Create phase accurate vector
@@ -58,26 +47,62 @@ for k=1:frameSize:numSamples*filterUpsample
     % Offset data and maintain phase between frames
     offsetData(timeIndex) = (noisyData(timeIndex).*freqShift);
  
-    
     % Offset Adjustment:
-    FFT = abs(fft(offsetData(timeIndex).^2));
-    maxARG = max(FFT) / (2*T*K);
-    course_adj_offset = offsetData(timeIndex) - maxARG;
+    
+    %Important corrections from previous solution: 
+    
+    %   1. The frequency offset is obtained by performing the equation 
+    %   to the actual offset data, not to the noisy data.
+    
+    %   2. The Fourier Transform needs to be squared after, we shouldn't
+    %   square the data, then put it into the fourier. That way our actual
+    %   offset will actually be accurate. When I tried using our method
+    %   with the offset data I kept getting a number in the 200 - 300
+    %   range. But when that number is squared, then I believe our coarse
+    %   frequency comphensation will be more accurate. 
+    
+    
+    
+    % Take fourier of offset data
+    FFT = abs(fft(offsetData(timeIndex).^2, 1024));
+    
+    % Square the fourier transform:
+  
+    % Finish the equation to get the actual offset. 
+    [~,actualOffset] = max(fftSquared);
+    actualOffset = actualOffset-1;
+    
+    if actualOffset >= 512 
+        actualOffset = actualOffset - 1024;
+    end
+    
+    actualOffset = (actualOffset*sampleRateHz)/(2*K);
+    disp(actualOffset);
+    % The rest of the solution is the same.
+
+    % Use the frequency offset found in prior section, and create
+    % adjustment constant
+    adjustment = -1i .*2*pi * actualOffset ./ sampleRateHz;
+    
+    % Frequency adjustment in terms of e^j*pi*w
+    freqAdjust = exp(adjustment*timeIndex);
+    % New original signals
+    newBoi(timeIndex) = (offsetData(timeIndex) .* freqAdjust);
+    
     
     % Visualize Error
-    step(sa,[noisyData(timeIndex),offsetData(timeIndex)]);pause(0.1); %#ok<*UNRCH>
-    
-    
+     %step(sa,[noisyData(timeIndex), newBoi(timeIndex)]);pause(0.1); %#ok<*UNRCH>
 
 end
 
 
 %% Plot
+figure
 df = sampleRateHz/frameSize;
 frequencies = -sampleRateHz/2:df:sampleRateHz/2-df;
 spec = @(sig) fftshift(10*log10(abs(fft(sig))));
 h = plot(frequencies, spec(noisyData(timeIndex)),...
-     frequencies, spec(offsetData(timeIndex) - maxARG));
+     frequencies, spec(newBoi(timeIndex)));
 grid on;xlabel('Frequency (Hz)');ylabel('PSD (dB)');
 legend('Original','Offset','Location','Best');
 NumTicks = 5;L = h(1).Parent.XLim;
