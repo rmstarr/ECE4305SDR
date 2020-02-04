@@ -1,11 +1,13 @@
 %% General system details
 sampleRateHz = 1e6; % Sample rate
+% 1 for BPSK, 3 for QPSK
 samplesPerSymbol = 1;
 frameSize = 2^10;
 numFrames = 100;
 numSamples = numFrames*frameSize; % Samples to simulate
+% 4 for QPSK, 2 for BPSK
 modulationOrder = 2;
-filterUpsample = 8;
+filterUpsample = 4;
 filterSymbolSpan = 8;
 
 %% Impairments
@@ -14,20 +16,25 @@ frequencyOffsetHz = 1e5; % Offset in hertz
 phaseOffset = 0; % Radians
 
 %% Generate symbols
-data = randi([0 samplesPerSymbol], numSamples, 1);
-mod = comm.DBPSKModulator();
-modulatedData = mod.step(data);
+data =  randi([0 samplesPerSymbol], numSamples, 1);
+% mod = comm.DBPSKModulator();
+% modulatedData = mod.step(data);
+
+% Generate QPSK Symbols:
+qpskmod = comm.QPSKModulator();
+qpskmodulatedData = qpskmod.step(data);
+
 
 %% Add TX Filter
 TxFlt = comm.RaisedCosineTransmitFilter('OutputSamplesPerSymbol', filterUpsample, 'FilterSpanInSymbols', filterSymbolSpan);
-filteredData = step(TxFlt, modulatedData);
+filteredData = step(TxFlt, qpskmodulatedData);
 
 %% Add noise
 noisyData = awgn(filteredData,snr);%,'measured');
 
 
 %% Setup visualization object(s)
-% sa = dsp.SpectrumAnalyzer('SampleRate',sampleRateHz,'ShowLegend',true);
+ %sa = dsp.SpectrumAnalyzer('SampleRate',sampleRateHz,'ShowLegend',true);
 
 %% Model of error
 % Add frequency offset to baseband signal
@@ -37,7 +44,9 @@ normalizedOffset = 1i.*2*pi*frequencyOffsetHz./sampleRateHz;
 T = 1/sampleRateHz;
 K = 1024;
 offsetData = zeros(size(noisyData));
-newBoi = zeros(size(noisyData));
+recoveredSig = zeros(size(noisyData));
+M = 4; % MPSK: 4 for QPSK, 2 for DBPSK
+
 for k=1:frameSize:numSamples*filterUpsample
 
     % Create phase accurate vector
@@ -49,49 +58,26 @@ for k=1:frameSize:numSamples*filterUpsample
  
     % Offset Adjustment:
     
-    %Important corrections from previous solution: 
-    
-    %   1. The frequency offset is obtained by performing the equation 
-    %   to the actual offset data, not to the noisy data.
-    
-    %   2. The Fourier Transform needs to be squared after, we shouldn't
-    %   square the data, then put it into the fourier. That way our actual
-    %   offset will actually be accurate. When I tried using our method
-    %   with the offset data I kept getting a number in the 200 - 300
-    %   range. But when that number is squared, then I believe our coarse
-    %   frequency comphensation will be more accurate. 
-    
-    
-    
     % Take fourier of offset data
-    FFT = abs(fft(offsetData(timeIndex).^2, 1024));
-    
+    FFT = abs(fft(offsetData(timeIndex).^M, 1024));
     % Square the fourier transform:
-  
-    % Finish the equation to get the actual offset. 
-    [~,actualOffset] = max(fftSquared);
+    % Find the maximum argument in the FFT 
+    [~,actualOffset] = max(FFT);
     actualOffset = actualOffset-1;
-    
-    if actualOffset >= 512 
-        actualOffset = actualOffset - 1024;
-    end
-    
-    actualOffset = (actualOffset*sampleRateHz)/(2*K);
+  
+    actualOffset = (actualOffset*sampleRateHz)/(M*K);
     disp(actualOffset);
-    % The rest of the solution is the same.
-
     % Use the frequency offset found in prior section, and create
     % adjustment constant
     adjustment = -1i .*2*pi * actualOffset ./ sampleRateHz;
-    
     % Frequency adjustment in terms of e^j*pi*w
     freqAdjust = exp(adjustment*timeIndex);
     % New original signals
-    newBoi(timeIndex) = (offsetData(timeIndex) .* freqAdjust);
+    recoveredSig(timeIndex) = (offsetData(timeIndex) .* freqAdjust);
     
     
     % Visualize Error
-     %step(sa,[noisyData(timeIndex), newBoi(timeIndex)]);pause(0.1); %#ok<*UNRCH>
+     %step(sa,[noisyData(timeIndex), recoveredSig(timeIndex)]);pause(0.1); %#ok<*UNRCH>
 
 end
 
@@ -102,8 +88,8 @@ df = sampleRateHz/frameSize;
 frequencies = -sampleRateHz/2:df:sampleRateHz/2-df;
 spec = @(sig) fftshift(10*log10(abs(fft(sig))));
 h = plot(frequencies, spec(noisyData(timeIndex)),...
-     frequencies, spec(newBoi(timeIndex)));
-grid on;xlabel('Frequency (Hz)');ylabel('PSD (dB)');
-legend('Original','Offset','Location','Best');
+     frequencies, spec(recoveredSig(timeIndex)));
+grid on;xlabel('Frequency (Hz)');ylabel('PSD (dB)'); title('After Coarse Frequency Compensation')
+legend('Original','Adjusted','Location','Best');
 NumTicks = 5;L = h(1).Parent.XLim;
 set(h(1).Parent,'XTick',linspace(L(1),L(2),NumTicks))
