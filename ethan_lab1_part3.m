@@ -4,16 +4,16 @@
 visuals = true;
 
 %% General system details
-sampleRateHz = 1e3; % Sample rate
+sampleRateHz = 1e6; % Sample rate
 samplesPerSymbol = 1;
 frameSize = 2^10;
-numFrames = 300;
+numFrames = 10;
 numSamples = numFrames*frameSize; % Samples to simulate
 
 %% Fine Frequency Compensator Variable initialization:
 
-loopBand = 0.01; % Loop bandwidt
-lamda = 1 / sqrt(2); % Dampening Factor
+loopBand = 0.05; % Loop bandwidt
+lamda = 1 / sqrt(2) ; % Dampening Factor
 M = 4; % Constellation Order
 
 theta = loopBand / (M * (lamda + (0.25/lamda)));
@@ -22,10 +22,6 @@ delta = 1 + 2*lamda*theta+theta^2;
 % Define the PLL Gains:
 G1 = (4*lamda*theta / delta) / M;
 G2 = ((4/M) * theta^2 / delta) / M;
-
-
-% Define estimated frequency lock range
-lockRange = 4*(2*pi*sqrt(2)*lamda * loopBand)^2 / (loopBand^3);
 
 %% Setup objects
 mod = comm.QPSKModulator();
@@ -62,8 +58,8 @@ noisyData = awgn(modulatedData,snr);%,'measured');
 
 %% Define Communication Object
 
-    fineSync = comm.CarrierSynchronizer('DampingFactor',1, ...
-    'NormalizedLoopBandwidth',0.01, ...
+    fineSync = comm.CarrierSynchronizer('DampingFactor',lamda, ...
+    'NormalizedLoopBandwidth',loopBand, ...
     'SamplesPerSymbol',samplesPerSymbol, ...
     'Modulation','QPSK');
 %% Model of error
@@ -72,6 +68,7 @@ noisyData = awgn(modulatedData,snr);%,'measured');
 % Precalculate constants
 normalizedOffset = 1i.*2*pi*frequencyOffsetHz./sampleRateHz;
 
+Phase = zeros(1:length(numSamples));
 offsetData = zeros(size(noisyData));
 for k=1:frameSize:numSamples
     
@@ -80,68 +77,30 @@ for k=1:frameSize:numSamples
     
     % Offset data and maintain phase between frames
     offsetData(timeIndex) = noisyData(timeIndex).*freqShift;
-        
-    rxData = fineSync(offsetData);
+    % Fine Frequency Compensation
+    [rxData] = fineSync(offsetData);
+    [~, phaseOff] = fineSync(offsetData);
     
     % Take phase offset, put inside a vector
     % Take differentiation of it
     % Plot it
-
-
+    
+    Phase(k:k+frameSize-1) = phaseOff(timeIndex);
     if visuals
-        step(cdPre,offsetData(timeIndex));step(cdPost,rxData(timeIndex));pause(0.1); %#ok<*UNRCH>
+        step(cdPre,noisyData(timeIndex));
+        step(cdPre,offsetData(timeIndex));
+        step(cdPost,rxData(timeIndex));pause(0.1); %#ok<*UNRCH>
     end
 
-    
-
-    
-    % Visualize Error
-
-
 end
-
-
-
+figure;
+plot(phaseOff)
+estFreqOffset = diff(phaseOff)*sampleRateHz/(2*pi);
+rmean = cumsum(estFreqOffset)./(1:length(estFreqOffset))';
+plot(rmean)
+xlabel('Symbols')
+ylabel('Estimated Frequency Offset (Hz)')
+title('Estimate of Frequency Offset: damping = 1/sqrt((2), loop BW = 0.05')
+grid
 
     
-
-
-
-% 
-% function FFC(offsetData())
-% 
-% % Set up PLL Constants:
-% loopBand = 0.01; % Loop bandwidt
-% lamda = 1 / sqrt(2); % Dampening Factor
-% M = 2; % Constellation Order
-% 
-% theta = loopBand / (M * (lamda + (0.25/lamda)));
-% delta = 1 + 2*lamda*theta+theta^2;
-% 
-% % Define the PLL Gains:
-% G1 = (4*lamda*theta / delta) / M;
-% G2 = ((4/M) * theta^2 / delta) / M;
-% display(G1);
-% display(G2);
-% 
-% % Define estimated frequency lock range
-% lockRange = 4*(2*pi*sqrt(2)*lamda * loopBand)^2 / (loopBand^3);
-% 
-% % Loop start of the PLL
-% for k = 1:frameSize:numSamples
-%    
-% % Step One: Phase Rotator:
-% 
-% 
-% 
-% 
-% % Step Two: Phase Error Detector
-% 
-% % Step Three: Loop Filter
-% 
-% % Step Four: Direct Digital Synchronizer
-% 
-% 
-% 
-% end
-% end
