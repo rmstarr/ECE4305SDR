@@ -31,14 +31,16 @@ rawData = ones(1, PDUbits);             % generation of "raw" data
 CRCbits = CRClength*8;                  % CRC length in bits
 CRC = zeros(1, CRCbits);                % Creation of empty CRC
 
-accAddrBinary = hexToBinaryVector(accAddr);
+accAddrBinary = hexToBinaryVector(accAddr)';
 
-dataPacket = [preamble accAddrBinary rawData CRC];
+%dataPacket = [preamble accAddrBinary rawData CRC];
 
 % turn to column vector
-dataPacket = dataPacket';
+%dataPacket = dataPacket';
 
-numSamples = length(dataPacket);                      % Samples to simulate
+DATA_NO_HEADER = [rawData CRC]';
+
+numSamples = length(DATA_NO_HEADER);                      % Samples to simulate
 
 %% Impairments
 snr = 15;
@@ -51,14 +53,20 @@ snr = 15;
 
 
 %% Transmit the Data in BLE
-bleTx = bleWaveformGenerator(rawData, 'Mode', BLE_Mode, 'ChannelIndex', channel,...
-    'SamplesPerSymbol', samplesPerSymbol, 'AccessAddress', accAddr);
+bleTx = bleWaveformGenerator(DATA_NO_HEADER, 'Mode', BLE_Mode, 'ChannelIndex', channel,...
+    'SamplesPerSymbol', samplesPerSymbol, 'AccessAddress', accAddrBinary);
 
+% LOL Ethan pls help plot the mag. response
+% numSamples = length(bleTx);
+% magResp = abs(bleTx);
+% plot(magResp);
 %% Raised Cosine Filter on TX Side
 rcTxFilt = comm.RaisedCosineTransmitFilter('OutputSamplesPerSymbol', filterUpsample,...
     'FilterSpanInSymbols', filterSymbolSpan);
 filteredTxData = step(rcTxFilt, bleTx);
-
+% LOL Ethan pls help plot the mag. response
+% filteredMagResp = abs(filteredTxData);
+% plot(filteredMagResp);
 %% Add noise
 noisyData = awgn(bleTx,snr);%,'measured');
 
@@ -67,9 +75,8 @@ noisyData = awgn(bleTx,snr);%,'measured');
 rxAGC = comm.AGC('DesiredOutputPower', 1);
 rxSigGain = rxAGC(noisyData);
 
-
 %% DC Offset Correction
-%------------------------------%
+rxSigNoDC = rxSigGain - mean(rxSigGain);
 
 %% Digital Downsampling and Filtering
 rcRxFilt = comm.RaisedCosineReceiveFilter('InputSamplesPerSymbol', inputSamplesPerSymbol, 'FilterSpanInSymbols', filterSymbolSpan, 'DecimationFactor', decimationFactor);
