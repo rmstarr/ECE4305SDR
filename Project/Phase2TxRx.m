@@ -9,7 +9,7 @@ visuals = true;
 
 %% General system details
 sampleRateHz = 1e6;                     % Sample rate
-samplesPerSymbol = 2;
+samplesPerSymbol = 8;
 frameSize = 2^3;                        % Size of data frame (1 byte)
 modulationOrder = 2;
 filterUpsample = 4;                     % Upsampling factor
@@ -134,14 +134,8 @@ for k=1:frameSize:numSamples
 
 end
 
-%% Raised Cosine Filter RX
-
-%% Synchronization
-%-------------------------
-
 %% Demodulation
-GMSKdemod = comm.GMSKDemodulator();
-rxDataDemod = step(GMSKdemod, rxData);
+rxDataDemod = gmskDemod(rxData,samplesPerSymbol);
 
 %% Decode & Pattern De-mapping
 rxDataNoPreamble = rxDataDemod(8:end); % I believe it is 8 bits long
@@ -155,6 +149,5 @@ initState = [1 chIndex]; % Initial conditions of shift register
 bitOutput = whiten(recovData, initState);
 
 %% CRC Check
-
 
 %% Error Rate Calculation 
