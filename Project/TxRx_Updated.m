@@ -70,8 +70,10 @@ for i = 1:length(snr)
     % 2. DC removal
     % 3. Carrier frequency offset correction
     % 4. Matched filtering
-    % 5. Demodulation and decoding
-    % 6. Dewhitening
+    % 5. Packet Detection
+    % 6. Timing Correction
+    % 7. Demodulation and decoding
+    % 8. Dewhitening
     
     %% Start of RX
     %% 1. Automatic Gain Control
@@ -107,6 +109,15 @@ for i = 1:length(snr)
     initRxParams = helperBLEReceiverInit(BLE_Mode,samplesPerSymbol,accAddrBinary);
     rxFilteredData = conv(rxData,initRxParams.h,'same');
     
+%     %% 5. Timing Correction
+%     timrecDelay = 2;
+%     rxFilteredData = [rxFilteredData;zeros(timrecDelay*initRxParams.sps,1)];
+%     rxWfmTimeComp = initRxParams.gmsktSync(rxFilteredData);
+%     rxWfmTimeComp = rxWfmTimeComp(timrecDelay+1:end); % Remove the delays
+% 
+%     %% 6. Packet Detection
+%     rxDataTimeSync = preambleDetection(rxWfmTimeComp,initRxParams);
+    
     %% 5a. Demodulation
     rxDataDemod = gmskDemod(rxFilteredData,samplesPerSymbol);
     
@@ -134,141 +145,3 @@ end
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-%     % Initialize Receiver Objects and Variables:
-%     % Bluetooth Object
-%     phyMode = 'LE1M';
-%     bleParam = helperBLEReceiverConfig(phyMode);
-%     
-%     sigSrc = comm.BasebandFileReader(bbFileName);
-%     bbSampleRate = sigSrc.SampleRate;
-%     sigSrc.SamplesPerFrame = 1e7;
-%     bleParam.SamplesPerSymbol = bbSampleRate/bleParam.SymbolRate;
-%     
-%     % *Capture the BLE Packets*
-%     
-%     % The transmitted waveform is captured as a burst
-%     dataCaptures = sigSrc();
-%     
-%     %AGC
-%     agc = comm.AGC('MaxPowerGain',20,'DesiredOutputPower',2);
-%     
-%     % FFC
-%     loopBand = 0.05; % Loop bandwidt
-%     lamda = 1 / sqrt(2) ; % Dampening Factor
-%     fineSync = comm.CarrierSynchronizer('DampingFactor',lamda, ...
-%         'NormalizedLoopBandwidth',loopBand, ...
-%         'SamplesPerSymbol',samplesPerSymbol, ...
-%         'Modulation','QPSK');
-%     
-%     %% Automatic Gain Control
-%     % Increase gain of transmitted BLE signal
-%     agcData = agc(bleTx);
-%     
-%     %% DC removal
-%     % Subtract the mean from the signal.
-%     dcData = agcData - mean(agcData);
-%     
-%     %% Carrier Frequency Offset Correction (Our implementation)
-%     freqAdjust = fineSync(dcData);
-%     
-%     %% Everything Else
-%     prbDet = comm.PreambleDetector(bleParam.RefSeq,'Detections','First');
-%     % Initialize counter variables
-%     pktCnt = 0;
-%     crcCnt = 0;
-%     displayFlag = true; % true if the received data is to be printed
-%     dataCaptures = length(DATA_NO_HEADER);
-%     % Loop to decode the captured BLE samples
-%     while length(dataCaptures) > bleParam.MinimumPacketLen
-%         
-%         % Consider two frames from the captured signal for each iteration
-%         startIndex = 1;
-%         endIndex = min(length(dataCaptures),2*bleParam.FrameLength);
-%         rcvSig = dataCaptures(startIndex:endIndex);
-%         
-%         rcvAGC = agc(rcvSig); % Perform AGC
-%         rcvDCFree = rcvAGC - mean(rcvAGC); % Remove the DC offset
-%         rcvFreqComp = freqCompensator(rcvDCFree); % Estimate and compensate for the carrier frequency offset
-%         rcvFilt = conv(rcvFreqComp,bleParam.h,'same'); % Perform gaussian matched filtering
-%         
-%         % Perform frame timing synchronization
-%         [~, dtMt] = prbDet(rcvFilt);
-%         release(prbDet)
-%         prbDet.Threshold = max(dtMt);
-%         prbIdx = prbDet(rcvFilt);
-%         
-%         % Extract message information
-%         [cfgLLAdv,pktCnt,crcCnt,remStartIdx] = helperBLEPhyBitRecover(rcvFilt,...
-%             prbIdx,pktCnt,crcCnt,bleParam);
-%         
-%         % Remaining signal in the burst captures
-%         dataCaptures = dataCaptures(1+remStartIdx:end);
-%         
-%         % Display the decoded information
-%         if displayFlag && ~isempty(cfgLLAdv)
-%             fprintf('Advertising PDU Type: %s\n', cfgLLAdv.PDUType);
-%             fprintf('Advertising Address: %s\n', cfgLLAdv.AdvertiserAddress);
-%         end
-%         
-%         % Release System objects
-%         release(freqCompensator)
-%         release(prbDet)
-%     end
-%     
-%     % Release the signal source
-%     %     release(sigSrc)
-%     
-%     % Determine the PER
-%     if pktCnt
-%         per(i) = 1-(crcCnt/pktCnt);
-%         fprintf('Packet error rate for %s mode is %f.\n',bleParam.Mode,per);
-%     else
-%         fprintf('\n No BLE packets were detected.\n')
-%     end
-%     
-% end
-% %% Data Display
-% 
-% % Plot of SNR versus PER
-% plot(snr, per)
-% title('PER Versus SNR')
-% xlabel('SNR (dB)')
-% ylabel('PER')
-% 
-% 
-% %% Stuff Removed
-% % %% Gaussian Match Filtering:
-% %
-% % rcvFilt = conv(freqAdjust, bleParam.h, 'same');
-% % %% Timing Synchronization:
-% %
-% % % Perform frame timing synchronization
-% %
-% % [~, mt] = prbDet(rcvFilt);
-% % %disp(mt);
-% % release(prbDet);
-% % prbDet.Threshold = max(mt);
-% % prbInd = prbDet(rcvFilt);
-% %
-% % %% Demodulation
-% %
-% %
-% % %% Encoding, (Demodulation), Dewhittening, and extraction of Data:
-% %
-% % %[bits, accessAddress] = bleReceiverPractical(gDemod,bleParam, channel, initRxParams);
-% % [cfgllData,pktCnt,crcCnt,startIdx] = dataBLEPhyBitRecover(rcvFilt, prbInd,pktCnt,crcCnt,bleParam);
-% %
-% % % Release Receiver Objects:
-% % disp(cfgllData)
-% %
-% % release(fineSync);
-% % release(agc);
