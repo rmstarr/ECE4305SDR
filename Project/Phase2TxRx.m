@@ -9,7 +9,7 @@ visuals = true;
 
 %% General system details
 sampleRateHz = 1e6;                     % Sample rate
-samplesPerSymbol = 1;
+samplesPerSymbol = 2;
 frameSize = 2^3;                        % Size of data frame (1 byte)
 modulationOrder = 2;
 filterUpsample = 4;                     % Upsampling factor
@@ -44,8 +44,8 @@ numSamples = length(DATA_NO_HEADER);                      % Samples to simulate
 
 %% Impairments
 snr = 15;
-% frequencyOffsetHz = sampleRateHz*0.02; % Offset in hertz
-% phaseOffset = 0; % Radians
+frequencyOffsetHz = sampleRateHz*0.02; % Offset in hertz
+phaseOffset = 0; % Radians
 
 % %% Generate symbols   - Probably don't need, GF/MSK modulation happens in
 % bleTX
@@ -134,17 +134,25 @@ for k=1:frameSize:numSamples
 
 end
 
+%% Raised Cosine Filter RX
+
 %% Synchronization
 %-------------------------
 
 %% Demodulation
-
-comm.OQPSKDemodulator()
+GMSKdemod = comm.GMSKDemodulator();
+rxDataDemod = step(GMSKdemod, rxData);
 
 %% Decode & Pattern De-mapping
+rxDataNoPreamble = rxDataDemod(8:end); % I believe it is 8 bits long
+recovAccAddr = int8(rxDataNoPreamble(1:32));
+recovData = int8(rxDataNoPreamble(33:end));
 
 %% De-whitening
-
+dewhitenStateLen = 6;
+chIndex = rem(floor(channel*pow2(1-dewhitenStateLen:0)),2);
+initState = [1 chIndex]; % Initial conditions of shift register
+bitOutput = whiten(recovData, initState);
 
 %% CRC Check
 
