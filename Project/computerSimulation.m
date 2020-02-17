@@ -10,7 +10,7 @@ visuals = true;
 
 %% General system details
 sampleRateHz = 1e6;                     % Sample rate
-samplesPerSymbol = 1;
+samplesPerSymbol = 8;
 frameSize = 2^3;                        % Size of data frame (1 byte)
 modulationOrder = 2;
 filterUpsample = 4;                     % Upsampling factor
@@ -60,16 +60,15 @@ snr = 15;
 bleTx = bleWaveformGenerator(DATA_NO_HEADER, 'Mode', BLE_Mode, 'ChannelIndex', channel,...
     'SamplesPerSymbol', samplesPerSymbol, 'AccessAddress', accAddrBinary);
 
-
 %% Raised Cosine Filter
 
 
-TxFlt = comm.RaisedCosineTransmitFilter('OutputSamplesPerSymbol', filterUpsample, 'FilterSpanInSymbols', filterSymbolSpan);
-filteredData = step(TxFlt, bleTx);
+% TxFlt = comm.RaisedCosineTransmitFilter('OutputSamplesPerSymbol', filterUpsample, 'FilterSpanInSymbols', filterSymbolSpan);
+% filteredData = step(TxFlt, bleTx);
 %% Add RF Imparements to signal to recover 
 
 % send through awgn channel
-noisyData = awgn(filteredData,snr);%,'measured');
+noisyData = awgn(bleTx,snr);%,'measured');
 
 % Apply Frequency Offset
 frequencyOffsetHz = 10000;
@@ -101,7 +100,7 @@ end
 
 % Bluetooth Object 
 phyMode = 'LE1M';
-bleParam = BLEReceiverConfig(phyMode);
+bleParam = ReceiverConfig(phyMode);
 
 %AGC
 agc = comm.AGC('MaxPowerGain',20,'DesiredOutputPower',2);
@@ -113,55 +112,55 @@ fineSync = comm.CarrierSynchronizer('DampingFactor',lamda, ...
     'NormalizedLoopBandwidth',loopBand, ...
     'SamplesPerSymbol',samplesPerSymbol, ...
     'Modulation','QPSK');
-preDet = comm.PreambleDetector(bleParam.RefSeq,'Detections','First');
-
+prbDet = comm.PreambleDetector(bleParam.RefSeq, 'Detections', 'First');
 % Initialize counter variables
 pktCnt = 0;
 crcCnt = 0;
-displayFlag = true; % true if the received data is to be printed
+
+% Create and configure the receiver System objects 
+initRxParams = ourPracticalInit(phyMode,samplesPerSymbol,accAddrBinary);
 
 
 %% Automatic Gain Control
-agcData = agc(offsetData);
+agcData = agc(bleTx);
 
 %% DC removal
 % Subtract the mean from the signal.
 dcData = agcData - mean(agcData);
-%% Match Filtering:
-% Raised cosine filter to restructure samples
-rcRxFilt = comm.RaisedCosineReceiveFilter('InputSamplesPerSymbol', inputSamplesPerSymbol, 'FilterSpanInSymbols', filterSymbolSpan, 'DecimationFactor', decimationFactor);
-filteredData = step(rcRxFilt, dcData);
+% %% Match Filtering:
+% % Raised cosine filter to restructure samples
+% rcRxFilt = comm.RaisedCosineReceiveFilter('InputSamplesPerSymbol', inputSamplesPerSymbol, 'FilterSpanInSymbols', filterSymbolSpan, 'DecimationFactor', decimationFactor);
+% filteredData = step(rcRxFilt, dcData);
 
 %% Carrier Frequency Offset Correction (Our implementation)
-freqAdjust = fineSync(filteredData);
+freqAdjust = fineSync(dcData);
 % 
 
-%% Timing Synchronization:
 
-% Not gonna do, we'll have this complete when we do the thing
-% Haven't done yet. Can we find a way to do it without actually
-% implementing it on our own? We'll take a look at 
+%% Gaussian Match Filtering:
+
+rcvFilt = conv(freqAdjust, bleParam.h, 'same');
+%% Timing Synchronization:
 
 % Perform frame timing synchronization
 
-% Code from example. Don't know what it does, but it contains information
-% we need to complete the receiver structure. 
+[~, mt] = prbDet(rcvFilt);
+%disp(mt);
+release(prbDet);
+prbDet.Threshold = max(mt);
+prbInd = prbDet(rcvFilt);
 
 %% Demodulation
-% 
-gDemod = comm.GMSKDemodulator('BandwidthTimeProduct', 0.5, 'PulseLength', 1);
-extractedData = gDemod(filteredData); % Demodulate the Data
+
+
 %% Encoding, (Demodulation), Dewhittening, and extraction of Data:
 
-% NOTE: WHEN IMPLEMENTING, DOUBLE CHECK THAT YOU DO DEMODULATION ONLY ONCE.
-% CURRENTLY THE FUNCTION HERE DOES DEMODULATION. SO BEFORE RUNNING THE
-% PROGRAM, DELETE ONE OF THOSE. 
-[dewhitenedBits,pktCnt,crcCnt,startIdx] = dataBLEPhyBitRecover(freqAdjust,pktCnt,crcCnt,bleParam);
-
+%[bits, accessAddress] = bleReceiverPractical(gDemod,bleParam, channel, initRxParams);
+[cfgllData,pktCnt,crcCnt,startIdx] = dataBLEPhyBitRecover(rcvFilt, prbInd,pktCnt,crcCnt,bleParam);
 
 % Release Receiver Objects:
+disp(cfgllData)
 
-release(preDet);
 release(fineSync);
 release(agc);
 

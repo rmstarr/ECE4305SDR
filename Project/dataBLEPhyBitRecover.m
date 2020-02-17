@@ -1,5 +1,5 @@
-function [dewhitenedBits,pktCnt,crcCnt,startIdx] = ...
-                    dataBLEPhyBitRecover(rcv,pktCnt,crcCnt,bleParam)
+function [cfgLLData,pktCnt,crcCnt,startIdx] = ...
+                    dataBLEPhyBitRecover(rcv,prbIdx, pktCnt,crcCnt,bleParam)
 
 
 % To generate a control PDU, create a
@@ -9,17 +9,25 @@ function [dewhitenedBits,pktCnt,crcCnt,startIdx] = ...
 % % Configure the fields:
 % % CRC initialization value
 % crcInit = cfgLLData.CRCInitialization;
-dewhitenedBits = 0;
+
+
+refSeqLen = length(bleParam.RefSeq); % Reference sequence length
+startIdx = min(length(rcv),2*bleParam.FrameLength); % Start index for the subsequent packet
 cfgLLData = [];
 
+if prbIdx >= refSeqLen
+    syncFrame = rcv(1+prbIdx-refSeqLen:end); % Frame that always starts with a preamble
 
-    if length(rcv) >= bleParam.MinimumPacketLen
 
+    if length(syncFrame) >= bleParam.MinimumPacketLen
+
+        
+        gDemod = gmskDemod(syncFrame, bleParam.SamplesPerSymbol);
         % Received preamble
-        rcvPreamble = rcv(1:bleParam.PrbLen)>0;
+        rcvPreamble = gDemod(1:bleParam.PrbLen)>0;
 
         % Synchronized data
-        demodSyncData = demodBits(1+bleParam.PrbLen:end);
+        demodSyncData = gDemod(1+bleParam.PrbLen:end);
 
         % Loop to recover the payload bits
         % A packet is considered as detected only when the received
@@ -76,3 +84,4 @@ cfgLLData = [];
             pktCnt = pktCnt+1;
         end
     end
+end
