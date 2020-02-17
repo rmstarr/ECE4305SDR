@@ -48,6 +48,8 @@ bleTx = bleWaveformGenerator(DATA_NO_HEADER, 'Mode', BLE_Mode, 'ChannelIndex', c
 
 %% Add RF Imparements to signal to recover
 for i = 1:length(snr)
+    [numErrs,perCnt] = deal(0);
+    numPkt = 1;
     % send through awgn channel
     noisyData = awgn(bleTx,snr(i));%,'measured');
     
@@ -102,21 +104,21 @@ for i = 1:length(snr)
     fineSync = comm.CarrierSynchronizer('DampingFactor',lamda, ...
         'NormalizedLoopBandwidth',loopBand,'SamplesPerSymbol',samplesPerSymbol, ...
         'Modulation','OQPSK');
-   
+    
     rxData = fineSync(offsetData);
     
     %% 4. Matched Filtering
     initRxParams = helperBLEReceiverInit(BLE_Mode,samplesPerSymbol,accAddrBinary);
     rxFilteredData = conv(rxData,initRxParams.h,'same');
     
-%     %% 5. Timing Correction
-%     timrecDelay = 2;
-%     rxFilteredData = [rxFilteredData;zeros(timrecDelay*initRxParams.sps,1)];
-%     rxWfmTimeComp = initRxParams.gmsktSync(rxFilteredData);
-%     rxWfmTimeComp = rxWfmTimeComp(timrecDelay+1:end); % Remove the delays
-% 
-%     %% 6. Packet Detection
-%     rxDataTimeSync = preambleDetection(rxWfmTimeComp,initRxParams);
+    %     %% 5. Timing Correction
+    %     timrecDelay = 2;
+    %     rxFilteredData = [rxFilteredData;zeros(timrecDelay*initRxParams.sps,1)];
+    %     rxWfmTimeComp = initRxParams.gmsktSync(rxFilteredData);
+    %     rxWfmTimeComp = rxWfmTimeComp(timrecDelay+1:end); % Remove the delays
+    %
+    %     %% 6. Packet Detection
+    %     rxDataTimeSync = preambleDetection(rxWfmTimeComp,initRxParams);
     
     %% 5a. Demodulation
     rxDataDemod = gmskDemod(rxFilteredData,samplesPerSymbol);
@@ -135,13 +137,25 @@ for i = 1:length(snr)
     %% CRC Check
     
     %% Error Rate Calculation
+    errorRate = comm.ErrorRate('Samples','Custom',...
+        'CustomSamples',1:(2080-1));
     
+    % Determine the BER and PER
+    if(length(DATA_NO_HEADER) == length(bitOutput))
+        errors = errorRate(DATA_NO_HEADER,bitOutput); % Outputs the accumulated errors
+        ber(BLE_Mode,snr) = errors(1);       % Accumulated BER
+        currentErrors = errors(2)-numErrs; % Number of errors in current packet
+        if(currentErrors) % Check if current packet is in error or not
+            perCnt  = perCnt + 1;          % Increment the PER count
+        end
+        numErrs = errors(2);               % Accumulated errors
+        numPkt = numPkt + 1;
+    end
+%     per(BLE_Mode,snr) = perCnt/(numPkt-1);
 end
-    
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
+
