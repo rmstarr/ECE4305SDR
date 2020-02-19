@@ -34,7 +34,7 @@ TxFlt = comm.RaisedCosineTransmitFilter(...
 RxFlt = comm.RaisedCosineReceiveFilter(...
     'InputSamplesPerSymbol', samplesPerSymbol,...
     'FilterSpanInSymbols', filterSymbolSpan,...
-    'DecimationFactor', 1);% Set to filterUpsample/2 when introducing timing estimation
+    'DecimationFactor', 2);% Set to filterUpsample/2 when introducing timing estimation
 RxFltRef = clone(RxFlt);
 
 %% Add noise source
@@ -52,7 +52,7 @@ sa = dsp.SpectrumAnalyzer('SampleRate',sampleRateHz,'ShowLegend',true);
 
 %% Symbol Synchronizer Object:
 
-timeSync =  comm.SymbolSynchronizer('Modulation', 'PAM/PSK/QAM', 'TimingErrorDetector', 'Mueller-Muller (decision-directed)', 'NormalizedLoopBandwidth', 0.01);
+timeSync =  comm.SymbolSynchronizer('Modulation', 'PAM/PSK/QAM', 'NormalizedLoopBandwidth', 0.01);
 
 %% Model of error
 % Add timing offset to baseband signal
@@ -81,7 +81,7 @@ for k=1:frameSize:(numSamples - frameSize)
     
     % Do timing correction:
     %adjust = offsetData(1:1/2:length(offsetData)-0.5);
-    adjustedSig = timeSync(filteredData);
+    adjustedSig = step(timeSync, filteredData);
     disp(length(adjustedSig));
     
     % Visualize Error
