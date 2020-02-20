@@ -25,6 +25,7 @@ timingOffset = samplesPerSymbol*0.01; % Samples
 data = randi([0 modulationOrder-1], numSamples*2, 1);
 mod = comm.DBPSKModulator();
 modulatedData = mod.step(data);
+phaseOffset = 30;
 
 %% Add TX/RX Filters
 TxFlt = comm.RaisedCosineTransmitFilter(...
@@ -72,8 +73,6 @@ for k=1:frameSize:(numSamples - frameSize)
     % Time delay signal
     offsetData = step(varDelay, noisyData, k/frameSize*timingOffset); % Variable delay
     
- 
-  
     % Filter signal
     filteredData = step(RxFlt, offsetData);
     filteredDataRef = step(RxFltRef, noisyData);
@@ -88,6 +87,17 @@ for k=1:frameSize:(numSamples - frameSize)
     step(cdPre,filteredData);
     step(cdPost,adjustedSig);pause(0.1); 
     release(cdPost);
-   
-    
+      
 end
+
+%% Creation of EVM object and reference constellation
+constPoints = 2; % 2-PAM
+refConst = pammod(data, constPoints);
+evm = comm.EVM('ReferenceSignalSource', 'Estimated from reference constellation', ...
+    'ReferenceConstellation', refConst);
+
+% EVM measurements of signal before timing delay
+evmPreTiming = evm(filteredData);
+
+% EVM measurements of signal after timing delay
+evmPostTiming = evm(adjustedSig);
