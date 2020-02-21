@@ -36,7 +36,7 @@ centerFrequency = 2.4e9;
 % Transmitter
 transmitter = sdrtx('Pluto', ...
     'CenterFrequency', centerFrequency, ...
-    'Gain', 0); 
+    'Gain', -10); 
 
 % Receiver
 receiver = sdrrx('Pluto', ...
@@ -86,7 +86,7 @@ tCorrectedSig = [];
 while 1
  
     % Continuously transmit the data repeatedly
-    transmitter.transmitRepeat(filteredData);
+    transmitter.transmitRepeat(filteredTxData);
     
     % Continuosly receiving the data
     receivedData = receiver();
