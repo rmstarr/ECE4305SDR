@@ -3,7 +3,7 @@ sampleRateHz = 1e6;             % Sample Rate in Hz
 visuals = true;                 % Used for displaying constellation
 filterSymbolSpan = 10;           % Number of symbols filter spans
 decimationFactor = 1;           % Downsampling factor
-GainFactor = 30;                % Gain of received signal
+GainFactor = 35;                % Gain of received signal
 SamplesPerFrame = 4096;         % Samples per frame of data         
 inputSamplesPerSymbol = 4;     % Input samples in a single symbol
 
@@ -48,13 +48,13 @@ cdPreOut = comm.ConstellationDiagram('ReferenceConstellation', [-1 1],...
 
 %% Model Received and Fine Frequency Compensated Data
 constPoints = 4; % DBPSK, but same constellation as 2-PAM
-refConst = qammod(data, constPoints);
-evm = comm.EVM('ReferenceSignalSource', 'Estimated from reference constellation', ...
-    'ReferenceConstellation', refConst);
+% refConst = qammod(data, constPoints);
+evm = comm.EVM('ReferenceSignalSource', 'Estimated from reference constellation');
 RxFilteredEVMdata = [];
 RxFilteredCorrectedEVMdata = [];
-
-while 1
+loop = 0;
+buffer = 200;
+while loop < buffer
     % Receive Data from Tx
     inputData = Rx();  
     
@@ -77,14 +77,13 @@ while 1
     end
     
 release(cdPost);
+loop = loop + 1;
 end
 
-%% EVM Analysis of the Signals
-% constPoints = 4; % DBPSK, but same constellation as 2-PAM
-% refConst = qammod(data, constPoints);
-% evm = comm.EVM('ReferenceSignalSource', 'Estimated from reference constellation', ...
-%     'ReferenceConstellation', refConst);
-% 
-% rxFilterEVM = evm(receivedFilteredData);
-% 
-% rxTCorrectedEVM = evm(receivedTCorrectedData);
+%% Graph
+t = 1:buffer;
+plot(t, RxFilteredEVMdata(t), t, RxFilteredCorrectedEVMdata(t));
+xlabel('Frame Number')
+ylabel('Error Vector Magnitude')
+title('EVM of Raw and Corrected Data Versus Frame Number')
+legend('No Time Correction', 'Time Correction')
