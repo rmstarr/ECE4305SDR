@@ -160,7 +160,7 @@ elseif strcmp(signalSource,'ADALM-PLUTO')
         'BasebandSampleRate',  bbSampleRate,...
         'SamplesPerFrame',     1e7,...
         'GainSource',         'Manual',...
-        'Gain',                25,...
+        'Gain',                20,...
         'OutputDataType',     'double');
 else
     error('Invalid signal source. Valid entries are File and ADALM-PLUTO.');
@@ -248,7 +248,8 @@ while length(dataCaptures) > bleParam.MinimumPacketLen
     % Display the decoded information
     if displayFlag && ~isempty(cfgLLAdv)
         fprintf('Advertising PDU Type: %s\n', cfgLLAdv.PDUType);
-        fprintf('Advertising Address: %s\n', cfgLLAdv.AdvertiserAddress);
+        fprintf('Advertising Address: %s\n', cfgLLAdv.AdvertisingData);
+        disp(char(hex2dec(cfgLLAdv.AdvertisingData))');
     end
 
     % Release System objects
