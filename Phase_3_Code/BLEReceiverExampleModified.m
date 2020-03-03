@@ -41,7 +41,7 @@ end
 bbSampleRate = bleParam.SymbolRate * bleParam.SamplesPerSymbol;
 sigSrc = sdrrx('Pluto',...
     'RadioID',             'usb:0',...
-    'CenterFrequency',     2.402e9,...
+    'CenterFrequency',     2.476e9,...
     'BasebandSampleRate',  bbSampleRate,...
     'SamplesPerFrame',     1e7,...
     'GainSource',         'Manual',...
@@ -100,7 +100,8 @@ prbDet = comm.PreambleDetector(bleParam.RefSeq,'Detections','First');
 pktCnt = 0;
 crcCnt = 0;
 displayFlag = true; % true if the received data is to be printed
-
+perVals = [];
+int = 0;
 % Loop to decode the captured BLE samples
 while length(dataCaptures) > bleParam.MinimumPacketLen
     
@@ -164,7 +165,17 @@ while length(dataCaptures) > bleParam.MinimumPacketLen
     % Release System objects
     release(freqCompensator)
     release(prbDet)
+    
+    perVals = [perVals, 1-(crcCnt/pktCnt)];
+    
+    int = int+1;
 end
+t = 1:int;
+figure;
+plot(t, perVals(t));
+title('PER of a single transmission vs. Time');
+xlabel('Packet Number');
+ylabel('Error Rate');
 
 % Release the signal source
 release(sigSrc)
