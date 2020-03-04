@@ -101,7 +101,13 @@ pktCnt = 0;
 crcCnt = 0;
 displayFlag = true; % true if the received data is to be printed
 perVals = [];
+collectedData = [];
 int = 0;
+
+tStamps = datetime('now')-minutes(9):minutes(1):datetime('now');
+channelID = 1009015;
+writeKey = 'L7C6E68PQQKAP61S';
+
 % Loop to decode the captured BLE samples
 while length(dataCaptures) > bleParam.MinimumPacketLen
     
@@ -152,9 +158,19 @@ while length(dataCaptures) > bleParam.MinimumPacketLen
             disp('Decoded Data:')
             disp(decodedData2);
         end
+        
     else
         disp('Packet lost in transmission...') % Double check w/ Kuldeep
     end
+    
+    % Parse out Joystick Data
+%     xVals = decodedData2(1:(length(decodedData2)/2));
+%     yVals = decodedData2(((length(decodedData2)/2)+1):(length(decodedData2)));
+    
+    % Save received data to send to ThingSpeak later
+    % Send data to ThingSpeak
+    thingSpeakWrite(channelID, decodedData2, 'TimeStamp', tStamps, 'WriteKey', writeKey);
+    disp('done');
     
     % Display the decoded information
     %     if displayFlag && ~isempty(cfgLLData)
@@ -170,6 +186,7 @@ while length(dataCaptures) > bleParam.MinimumPacketLen
     
     int = int+1;
 end
+
 t = 1:int;
 figure;
 plot(t, perVals(t));
