@@ -104,7 +104,7 @@ perVals = [];
 collectedData = [];
 int = 0;
 
-tStamps = datetime('now')-minutes(9):minutes(1):datetime('now');
+tStamps = datetime('now')-minutes(11):minutes(1):datetime('now');
 channelID = 1009015;
 writeKey = 'L7C6E68PQQKAP61S';
 
@@ -141,7 +141,7 @@ while length(dataCaptures) > bleParam.MinimumPacketLen
     leftovers = mod(rows, 8);
     
     if leftovers ~= 0
-        payload = payload(1 : hexNum*8 + leftovers, :);
+        payload = payload(1 : hexNum*8, :);
         [rows, cols] = size(payload);
         if cols == 0
             skip = 1;  % Eliminate edge case where we return nothing
@@ -159,18 +159,20 @@ while length(dataCaptures) > bleParam.MinimumPacketLen
             disp(decodedData2);
         end
         
+        % Send data to ThingSpeak
+        if ~(isempty(decodedData2))
+            thingSpeakWrite(channelID, decodedData2, 'TimeStamp', tStamps, 'WriteKey', writeKey);
+            disp('done');
+            pause(15);
+        end
+    
     else
         disp('Packet lost in transmission...') % Double check w/ Kuldeep
     end
     
     % Parse out Joystick Data
 %     xVals = decodedData2(1:(length(decodedData2)/2));
-%     yVals = decodedData2(((length(decodedData2)/2)+1):(length(decodedData2)));
-    
-    % Save received data to send to ThingSpeak later
-    % Send data to ThingSpeak
-    thingSpeakWrite(channelID, decodedData2, 'TimeStamp', tStamps, 'WriteKey', writeKey);
-    disp('done');
+%     yVals = decodedData2(((length(decodedData2)/2)+1):(length(decodedData2)));    
     
     % Display the decoded information
     %     if displayFlag && ~isempty(cfgLLData)
